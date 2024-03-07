@@ -14,8 +14,9 @@ rng = jax.random.PRNGKey(123)
 # hyperparam
 batch_size = 16 # how many independent sequences will we process in parallel?
 block_size = 32 # what is the maximum context length for predictions?
-n_embed = 32
-n_layer = 1
+n_embed = 64 # head size
+n_head = 2
+n_layer = 2
 learning_rate = 0.001
 # =====
 
@@ -56,6 +57,7 @@ m = NanoGpt(
     n_embed=n_embed,
     block_size=block_size,
     n_layer=n_layer,
+    n_head=n_head,
 )
 params = m.init(init_rng, example_x)
 num_params = sum(x.size for x in jax.tree.leaves(params))

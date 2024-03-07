@@ -99,3 +99,17 @@ for epoch in range(5000):
         batch = get_batch("val", data_key)
         val_loss = calculate_loss(state, state.params, batch, dropout_rng)
         print(f"Step {epoch}: train loss: {loss}, val loss: {val_loss}")
+
+def generate(m, key, params, idx, max_new_tokens: int):
+    for i in range(max_new_tokens):
+        context = idx[:, -block_size:] # max context len is block_size
+        key, k = jax.random.split(key)
+        logits = m.apply(params, context)[:,-1,:] # at the last token, B by vocab_size
+        next_idx = jax.random.categorical(k, logits)
+        idx = jnp.concat([idx, jnp.expand_dims(next_idx, axis=1)], axis=1)
+    return idx
+
+context = jnp.zeros((1, 1), dtype=jnp.int32)
+rng, generate_key = jax.random.split(rng, 2)
+idx = generate(m, generate_key, state.params, context, max_new_tokens=100)[0]
+print(decode(idx.tolist()))

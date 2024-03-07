@@ -111,13 +111,3 @@ class NanoGpt(nn.Module):
         x = self.lm_head(x) # B, T, vocab_size
         
         return x
-    
-    def generate(self, key, params, idx, max_new_tokens: int):
-        self.training = False
-        for _ in range(max_new_tokens):
-            key, k = jax.random.split(key)
-            logits = self.apply(params, idx)[:,-1,:] # at the last token, B by vocab_size
-            next_idx = jax.random.categorical(k, logits)
-            idx = jnp.concat([idx, jnp.expand_dims(next_idx, axis=1)], axis=1)
-        
-        return idx

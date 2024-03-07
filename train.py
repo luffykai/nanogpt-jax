@@ -1,15 +1,22 @@
 from typing import List
 
+from flax.training import train_state
 import jax
 import jax.numpy as jnp
+import optax
+
+from model import NanoGpt
 
 
 # const
 rng = jax.random.PRNGKey(123)
 
 # hyperparam
-batch_size = 4 # how many independent sequences will we process in parallel?
-block_size = 8 # what is the maximum context length for predictions?
+batch_size = 16 # how many independent sequences will we process in parallel?
+block_size = 32 # what is the maximum context length for predictions?
+n_embed = 64
+n_layer = 1
+learning_rate = 0.003
 # =====
 
 with open('data/input.txt', 'r', encoding='utf-8') as f:
@@ -27,18 +34,62 @@ def encode(s: str) -> List[int]:
 def decode(x: List[int]) -> str:
     return ''.join([itos[i] for i in x]) 
 
-data = jnp.array(encode(text), dtype=jnp.float32)
-print(data.shape, data.dtype)
-
+data = jnp.array(encode(text))
+print(len(data))
 n = int(0.9*len(data)) # first 90% will be train, rest val
 train_data = data[:n]
 val_data = data[n:]
 
-# data loading
-def get_batch(split: str, k, maxval = len(data) - block_size):
+def get_batch(split: str, k):
     # generate a small batch of data of inputs x and targets y
     data = train_data if split == 'train' else val_data
+    maxval = len(data) - block_size
     idx = jax.random.randint(k, shape=(batch_size,), minval=0, maxval=maxval)
     x = jnp.stack([data[i:i+block_size] for i in idx])
     y = jnp.stack([data[i+1:i+block_size+1] for i in idx])
     return x, y
+
+rng, init_rng, data_rng = jax.random.split(rng, 3)
+example_x, example_y = get_batch("train", k=data_rng)
+model = NanoGpt(
+    vocab_size=vocab_size,
+    n_embed=n_embed,
+    block_size=block_size,
+    n_layer=n_layer,
+)
+params = model.init(init_rng, example_x)
+num_params = sum(x.size for x in jax.tree.leaves(params))
+print(f"number of params: {num_params}")
+
+optimizer = optax.adamw(learning_rate=learning_rate)
+
+
+# TODO: also returns accuracy
+def calculate_loss(state: train_state.TrainState, params, batch):
+    x, y = batch
+    logits = state.apply_fn(params, x)
+    # expand dim on y so it's broadcast-able
+    loss = optax.softmax_cross_entropy(logits, jnp.expand_dims(y, 2)).mean()
+    return loss
+
+# TODO: jit
+def train_step(state: train_state.TrainState, batch):
+    grad_fn = jax.value_and_grad(
+        calculate_loss,
+        argnums=1,
+    )
+    loss, grads = grad_fn(state, state.params, batch)
+    state = state.apply_gradients(grads=grads)
+
+    return state, loss
+
+state = train_state.TrainState.create(
+    apply_fn=model.apply,
+    params=params,
+    tx=optimizer,
+)
+for epoch in range(10):
+    rng, data_key = jax.random.split(rng, 2)
+    batch = get_batch("train", data_key)
+    state, loss = train_step(state, batch)
+    print(f"{loss}")

@@ -1,6 +1,5 @@
 import math
 
-import flax
 from flax import linen as nn
 import jax
 from jax import numpy as jnp
@@ -55,13 +54,26 @@ class Block(nn.Module):
         return x
 
 class NanoGpt(nn.Module):
-    n_block: int
+    vocab_size: int
+    n_embed: int # embedding feature size
+    block_size: int # context len
+    n_layer: int
 
     def setup(self):
-        self.blocks = [Block(n_embed=16) for _ in range(self.n_block)]
+        self.token_embedding = nn.Embed(num_embeddings=self.vocab_size, features=self.n_embed)
+        self.positional_embedding = nn.Embed(num_embeddings=self.block_size, features=self.n_embed)
+        self.blocks = [Block(n_embed=self.n_embed) for _ in range(self.n_layer)]
+        self.ln_f = nn.LayerNorm()
+        self.lm_head = nn.Dense(self.vocab_size)
 
     def __call__(self, x):
+        B, T = x.shape # batch size, context len
+        tok_emb = self.token_embedding(x) # B, T, n_embed
+        pos_emb = self.positional_embedding(jnp.arange(T)) # T, n_embed
+        x = tok_emb + pos_emb
         for block in self.blocks:
             x = block(x)
+        x = self.ln_f(x)
+        x = self.lm_head(x) # B, T, vocab_size
         
         return x

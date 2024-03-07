@@ -15,10 +15,10 @@ rng = jax.random.PRNGKey(123)
 batch_size = 16 # how many independent sequences will we process in parallel?
 block_size = 32 # what is the maximum context length for predictions?
 n_embed = 64 # head size
-n_head = 2
-n_layer = 2
+n_head = 4
+n_layer = 4
 learning_rate = 0.001
-dropout = 0.1
+dropout = 0.0
 # =====
 
 with open('data/input.txt', 'r', encoding='utf-8') as f:
@@ -68,15 +68,13 @@ print(f"number of params: {num_params}")
 
 optimizer = optax.adamw(learning_rate=learning_rate)
 
-
-# TODO: also returns accuracy
 def calculate_loss(state: train_state.TrainState, params, batch, rng):
     x, y = batch
     logits = state.apply_fn(params, x, rngs = {"dropout": rng})
     loss = optax.softmax_cross_entropy_with_integer_labels(logits, y).mean()
     return loss
 
-# TODO: jit
+@jax.jit
 def train_step(state: train_state.TrainState, batch, drop_rng):
     grad_fn = jax.value_and_grad(
         calculate_loss,
@@ -92,7 +90,7 @@ state = train_state.TrainState.create(
     params=params,
     tx=optimizer,
 )
-for epoch in range(1000):
+for epoch in range(5000):
     rng, data_key, drop_rng = jax.random.split(rng, 3)
     batch = get_batch("train", data_key)
     state, loss = train_step(state, batch, drop_rng)
@@ -100,4 +98,4 @@ for epoch in range(1000):
         rng, data_key = jax.random.split(rng, 2)
         batch = get_batch("val", data_key)
         val_loss = calculate_loss(state, state.params, batch, dropout_rng)
-        print(f"train loss: {loss}, val loss: {val_loss}")
+        print(f"Step {epoch}: train loss: {loss}, val loss: {val_loss}")

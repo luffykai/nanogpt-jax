@@ -68,8 +68,7 @@ optimizer = optax.adamw(learning_rate=learning_rate)
 def calculate_loss(state: train_state.TrainState, params, batch):
     x, y = batch
     logits = state.apply_fn(params, x)
-    # expand dim on y so it's broadcast-able
-    loss = optax.softmax_cross_entropy(logits, jnp.expand_dims(y, 2)).mean()
+    loss = optax.softmax_cross_entropy_with_integer_labels(logits, y).mean()
     return loss
 
 # TODO: jit
@@ -88,8 +87,9 @@ state = train_state.TrainState.create(
     params=params,
     tx=optimizer,
 )
-for epoch in range(10):
+for epoch in range(1000):
     rng, data_key = jax.random.split(rng, 2)
     batch = get_batch("train", data_key)
     state, loss = train_step(state, batch)
-    print(f"{loss}")
+    if epoch % 20 == 0:
+        print(loss)

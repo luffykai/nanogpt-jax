@@ -13,9 +13,9 @@ class Attention(nn.Module):
 
     def setup(self):
         self.kqv = nn.Dense(self.n_embed * 3, use_bias=False)
-        #self.attn_drop = nn.Dropout(rate=self.dropout, deterministic=not self.training)
+        self.attn_drop = nn.Dropout(rate=self.dropout, deterministic=not self.training)
         self.proj = nn.Dense(self.n_embed)
-        #self.final_drop = nn.Dropout(rate=self.dropout, deterministic=not self.training)
+        self.final_drop = nn.Dropout(rate=self.dropout, deterministic=not self.training)
 
     def __call__(self, x):
         B, T, C = x.shape # batch size, context len, embedding dim
@@ -42,13 +42,12 @@ class Attention(nn.Module):
         mask = jnp.tril(jnp.ones_like(attn))
         attn = jnp.where(mask == 0, -jnp.inf, attn) # upper triangle  are all -inf
         attn = jax.nn.softmax(attn)
-        #attn = self.attn_drop(attn)
+        attn = self.attn_drop(attn)
 
         y = jnp.matmul(attn, v) # B, n_head, T, n_embed
         # TODO: do we need contiguous? -> reshape order A F or C?
         y = jnp.reshape(jnp.transpose(y, [0,2,1,3]), (B, T, self.n_embed))
-        #y = self.final_drop(self.proj(y))
-        y = self.proj(y)
+        y = self.final_drop(self.proj(y))
 
         return y
 
@@ -71,10 +70,11 @@ class Block(nn.Module):
     bias: bool
     n_head: int
     training: bool = True
+    dropout: float = 0.0
 
     def setup(self):
         self.ln1 = nn.LayerNorm(use_bias=self.bias)
-        self.attn = Attention(n_embed=self.n_embed, n_head=self.n_head, training=self.training)
+        self.attn = Attention(n_embed=self.n_embed, n_head=self.n_head, training=self.training, dropout=self.dropout)
         self.ln2 = nn.LayerNorm(use_bias=self.bias)
         self.mlp = MLP(h_dim = 4 * self.n_embed, output_dim=self.n_embed)
 
@@ -96,7 +96,7 @@ class NanoGpt(nn.Module):
     def setup(self):
         self.token_embedding = nn.Embed(num_embeddings=self.vocab_size, features=self.n_embed)
         self.positional_embedding = nn.Embed(num_embeddings=self.block_size, features=self.n_embed)
-        self.blocks = [Block(n_embed=self.n_embed, bias=self.bias, n_head=self.n_head, training=self.training) for _ in range(self.n_layer)]
+        self.blocks = [Block(n_embed=self.n_embed, bias=self.bias, n_head=self.n_head, training=self.training, dropout=self.dropout) for _ in range(self.n_layer)]
         self.ln_f = nn.LayerNorm(use_bias=self.bias)
         self.lm_head = nn.Dense(self.vocab_size, use_bias=self.bias)
 
@@ -113,6 +113,7 @@ class NanoGpt(nn.Module):
         return x
     
     def generate(self, key, params, idx, max_new_tokens: int):
+        self.training = False
         for _ in range(max_new_tokens):
             key, k = jax.random.split(key)
             logits = self.apply(params, idx)[:,-1,:] # at the last token, B by vocab_size

@@ -18,6 +18,7 @@ n_embed = 64 # head size
 n_head = 2
 n_layer = 2
 learning_rate = 0.001
+dropout = 0.1
 # =====
 
 with open('data/input.txt', 'r', encoding='utf-8') as f:
@@ -50,7 +51,7 @@ def get_batch(split: str, k):
     y = jnp.stack([data[i+1:i+block_size+1] for i in idx])
     return x, y
 
-rng, init_rng, data_rng = jax.random.split(rng, 3)
+rng, init_rng, dropout_rng, data_rng = jax.random.split(rng, 4)
 example_x, example_y = get_batch("train", k=data_rng)
 m = NanoGpt(
     vocab_size=vocab_size,
@@ -58,8 +59,10 @@ m = NanoGpt(
     block_size=block_size,
     n_layer=n_layer,
     n_head=n_head,
+    training=True,
+    dropout=dropout,
 )
-params = m.init(init_rng, example_x)
+params = m.init({"params": init_rng, "dropout": dropout_rng}, example_x)
 num_params = sum(x.size for x in jax.tree.leaves(params))
 print(f"number of params: {num_params}")
 
@@ -67,19 +70,19 @@ optimizer = optax.adamw(learning_rate=learning_rate)
 
 
 # TODO: also returns accuracy
-def calculate_loss(state: train_state.TrainState, params, batch):
+def calculate_loss(state: train_state.TrainState, params, batch, rng):
     x, y = batch
-    logits = state.apply_fn(params, x)
+    logits = state.apply_fn(params, x, rngs = {"dropout": rng})
     loss = optax.softmax_cross_entropy_with_integer_labels(logits, y).mean()
     return loss
 
 # TODO: jit
-def train_step(state: train_state.TrainState, batch):
+def train_step(state: train_state.TrainState, batch, drop_rng):
     grad_fn = jax.value_and_grad(
         calculate_loss,
         argnums=1,
     )
-    loss, grads = grad_fn(state, state.params, batch)
+    loss, grads = grad_fn(state, state.params, batch, drop_rng)
     state = state.apply_gradients(grads=grads)
 
     return state, loss
@@ -90,8 +93,11 @@ state = train_state.TrainState.create(
     tx=optimizer,
 )
 for epoch in range(1000):
-    rng, data_key = jax.random.split(rng, 2)
+    rng, data_key, drop_rng = jax.random.split(rng, 3)
     batch = get_batch("train", data_key)
-    state, loss = train_step(state, batch)
-    if epoch % 20 == 0:
-        print(loss)
+    state, loss = train_step(state, batch, drop_rng)
+    if epoch % 100 == 0:
+        rng, data_key = jax.random.split(rng, 2)
+        batch = get_batch("val", data_key)
+        val_loss = calculate_loss(state, state.params, batch, dropout_rng)
+        print(f"train loss: {loss}, val loss: {val_loss}")

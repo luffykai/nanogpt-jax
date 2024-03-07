@@ -1,0 +1,5 @@
+*.swp
+venv
+test.ipynb
+__pycache__
+data

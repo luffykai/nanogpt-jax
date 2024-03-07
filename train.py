@@ -14,9 +14,9 @@ rng = jax.random.PRNGKey(123)
 # hyperparam
 batch_size = 16 # how many independent sequences will we process in parallel?
 block_size = 32 # what is the maximum context length for predictions?
-n_embed = 64
+n_embed = 32
 n_layer = 1
-learning_rate = 0.003
+learning_rate = 0.001
 # =====
 
 with open('data/input.txt', 'r', encoding='utf-8') as f:
@@ -51,13 +51,13 @@ def get_batch(split: str, k):
 
 rng, init_rng, data_rng = jax.random.split(rng, 3)
 example_x, example_y = get_batch("train", k=data_rng)
-model = NanoGpt(
+m = NanoGpt(
     vocab_size=vocab_size,
     n_embed=n_embed,
     block_size=block_size,
     n_layer=n_layer,
 )
-params = model.init(init_rng, example_x)
+params = m.init(init_rng, example_x)
 num_params = sum(x.size for x in jax.tree.leaves(params))
 print(f"number of params: {num_params}")
 
@@ -84,7 +84,7 @@ def train_step(state: train_state.TrainState, batch):
     return state, loss
 
 state = train_state.TrainState.create(
-    apply_fn=model.apply,
+    apply_fn=m.apply,
     params=params,
     tx=optimizer,
 )

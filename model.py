@@ -5,6 +5,20 @@ import jax
 from jax import numpy as jnp
 
 
+class MLP(nn.Module):
+    h_dim: int
+    output_dim: int
+
+    @nn.compact
+    def __call__(self, x):
+        x = nn.Dense(features=self.h_dim)(x) # TODO: bias? and below too
+        x = nn.gelu(x)
+        x = nn.Dense(features=self.output_dim)(x)
+        # TODO: dropout
+
+        return x
+
+
 class Attention(nn.Module):
     n_embed: int  # output dim (head size)
     n_head: int
@@ -52,18 +66,16 @@ class Attention(nn.Module):
         return y
 
 
-class MLP(nn.Module):
-    h_dim: int
-    output_dim: int
+class HedgehogAttention(nn.Module):
+    n_embed: int  # output dim (head size)
+    n_head: int
 
-    @nn.compact
+    def setup(self):
+        pass
+
     def __call__(self, x):
-        x = nn.Dense(features=self.h_dim)(x) # TODO: bias? and below too
-        x = nn.gelu(x)
-        x = nn.Dense(features=self.output_dim)(x)
-        # TODO: dropout
+        pass
 
-        return x
 
 class Block(nn.Module):
     n_embed: int
@@ -84,7 +96,7 @@ class Block(nn.Module):
         return x
 
 class NanoGpt(nn.Module):
-    vocab_size: int
+    num_embeddings: int
     n_embed: int # embedding feature size
     block_size: int # context len
     n_layer: int
@@ -94,11 +106,11 @@ class NanoGpt(nn.Module):
     dropout: float = 0.0
 
     def setup(self):
-        self.token_embedding = nn.Embed(num_embeddings=self.vocab_size, features=self.n_embed)
+        self.token_embedding = nn.Embed(num_embeddings=self.num_embeddings, features=self.n_embed)
         self.positional_embedding = nn.Embed(num_embeddings=self.block_size, features=self.n_embed)
         self.blocks = [Block(n_embed=self.n_embed, bias=self.bias, n_head=self.n_head, training=self.training, dropout=self.dropout) for _ in range(self.n_layer)]
         self.ln_f = nn.LayerNorm(use_bias=self.bias)
-        self.lm_head = nn.Dense(self.vocab_size, use_bias=self.bias)
+        self.lm_head = nn.Dense(self.num_embeddings, use_bias=self.bias)
 
     def __call__(self, x):
         B, T = x.shape # batch size, context len

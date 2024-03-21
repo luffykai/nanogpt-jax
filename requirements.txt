@@ -1,6 +1,10 @@
+datasets
 jax
 jaxlib
 flax
 optax
+portalocker
 torch
+torchtext
 tqdm
+tiktoken

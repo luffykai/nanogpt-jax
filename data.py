@@ -64,29 +64,13 @@ def shakespear(batch_size=16, context_size=32):
 # == wikitext
 class TextRowDataset(Dataset):
 
-    def __init__(self, encoded: List[List[int]], context_len: int):
-        all_x = []
-        all_y = []
-        for row in tqdm(encoded):
-            if len(row) >= context_len + 1:
-                new_x, new_y = self.process_row(row, context_len)
-                all_x.append(new_x)
-                all_y.append(new_y)
-        self.x = np.concatenate(all_x)
-        self.y = np.concatenate(all_y)
-        print(len(self.x))
+    def __init__(self, dataset, context_len: int):
+        self.row_id = 0
+        self.token_id = 0
+        self.dataset = dataset  # huggingface dataset
     
-    def process_row(self, row: List[int], context_len: int):
-        L = len(row)
-        x = np.stack([row[i: i + context_len] for i in range(L - context_len)])
-        y = np.stack([row[i+1: i + context_len + 1] for i in range(L - context_len)])
-        return x, y
-    
-    def __len__(self):
-        return len(self.x)
-    
-    def __getitem__(self, idx):
-        return self.x[idx], self.y[idx]
+    def __iter__(self):
+        pass
 
 
 def wikitext103(batch_size, context_len):
@@ -97,14 +81,17 @@ def wikitext103(batch_size, context_len):
         return example
 
     data = data.map(encode)
-    train_data = TextRowDataset(data["train"]["text"], context_len)
-    test_data = TextRowDataset(data["test"]["text"], context_len)
-    trainloader = DataLoader(
-        train_data, batch_size, shuffle=True
-    )
-    testloader = DataLoader(
-        test_data, batch_size, shuffle=True
-    )
+    #train_data = TextRowDataset(data["train"]["text"], context_len)
+    # test_data = TextRowDataset(data["test"]["text"], context_len)
+    # trainloader = DataLoader(
+    #     train_data, batch_size, shuffle=True
+    # )
+    # testloader = DataLoader(
+    #     test_data, batch_size, shuffle=True
+    # )
+    print(data["train"])
+    print(data["train"].__class__)
+    return data
     
     return DataSpec(trainloader, testloader, enc.max_token_value), enc
 

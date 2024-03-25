@@ -5,15 +5,14 @@ from datasets import load_dataset, DatasetDict
 import numpy as np
 from jax import numpy as jnp
 from torch.utils.data import Dataset, DataLoader
-import tiktoken
 from tqdm import tqdm
+from tokenizers import Tokenizer
 
 
 @dataclass
 class DataSpec:
     trainloader: DataLoader
     testloader: DataLoader
-    num_embeddings: int
 
 
 # === tiny shakespear
@@ -58,55 +57,31 @@ def shakespear(batch_size=16, context_size=32):
         CharDataset(test_data, context_size), batch_size, shuffle=True
     )
 
-    return DataSpec(trainloader, testloader, len(chars)), decode
+    return DataSpec(trainloader, testloader), len(chars), decode
 
 
 # == wikitext
-class TextRowDataset(Dataset):
-
-    def __init__(self, dataset, context_len: int):
-        self.row_id = 0
-        self.token_id = 0
-        self.dataset = dataset  # huggingface dataset
-    
-    def __iter__(self):
-        pass
-
-
-def wikitext103(batch_size, context_len):
+def wikitext103(batch_size):
     data = load_dataset("wikitext", name="wikitext-103-v1")
-    enc = tiktoken.get_encoding("cl100k_base")
-    def encode(example):
-        example["text"] = enc.encode(example["text"])
-        return example
+    train_data = data["train"].filter(
+        lambda example: len(example["text"]) > 0 
+    )
+    test_data = data["test"].filter(
+        lambda example: len(example["text"]) > 0 
+    )
+    tokenizer = Tokenizer.from_pretrained("bert-base-uncased")
 
-    data = data.map(encode)
-    #train_data = TextRowDataset(data["train"]["text"], context_len)
-    # test_data = TextRowDataset(data["test"]["text"], context_len)
-    # trainloader = DataLoader(
-    #     train_data, batch_size, shuffle=True
-    # )
-    # testloader = DataLoader(
-    #     test_data, batch_size, shuffle=True
-    # )
-    print(data["train"])
-    print(data["train"].__class__)
-    return data
+    trainloader = DataLoader(
+        train_data, batch_size, shuffle=True
+    )
+    testloader = DataLoader(
+        test_data, batch_size, shuffle=True
+    )
     
-    return DataSpec(trainloader, testloader, enc.max_token_value), enc
+    return DataSpec(trainloader, testloader), tokenizer
 
 
 DatasetsMap = {
     "shakespear": shakespear,
     "wiki": wikitext103,
 }
-
-# def get_batch(split: str, k):
-#     print("wtf")
-#     # generate a small batch of data of inputs x and targets y
-#     data = train_data if split == 'train' else val_data
-#     maxval = len(data) - block_size
-#     idx = jax.random.randint(k, shape=(batch_size,), minval=0, maxval=maxval)
-#     x = jnp.stack([data[i:i+block_size] for i in idx])
-#     y = jnp.stack([data[i+1:i+block_size+1] for i in idx])
-#     return x, y

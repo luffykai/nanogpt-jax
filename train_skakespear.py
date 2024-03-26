@@ -1,4 +1,5 @@
 from typing import List
+import logging
 
 from flax import linen as nn
 from flax.training import train_state
@@ -8,14 +9,14 @@ import optax
 from tqdm import tqdm
 
 from model import NanoGpt
-from data import DatasetDict
+from data import DatasetsMap
 
 # TODO: setup so it's easy to switch between local run and cloud gpu run
 num_epoch = 10
 max_iter_per_epoch = 300
-# model hyperparam
-batch_size = 16 # how many independent sequences will we process in parallel?
-block_size = 32 # what is the maximum context length for predictions?
+dataset_key = "shakespear"
+batch_size = 16
+context_len = 32
 n_embed = 64 # head size
 n_head = 4
 n_layer = 4
@@ -42,7 +43,7 @@ def train_step(state: train_state.TrainState, x, y, drop_rng):
     return state, loss
 
 
-def run_train(m: nn.Module, params, optimizer, rng, trainloader, testloader):
+def train_shakespear(m: nn.Module, params, optimizer, rng, trainloader, testloader):
     state = train_state.TrainState.create(
         apply_fn=m.apply,
         params=params,
@@ -66,10 +67,10 @@ def run_train(m: nn.Module, params, optimizer, rng, trainloader, testloader):
     return state
 
 
-def generate(m, rng, params, decode, max_new_tokens=100):
+def generate_shakespear(m, rng, params, decode, max_new_tokens=100):
     def _generate(m, key, params, idx, max_new_tokens: int):
         for i in range(max_new_tokens):
-            context = idx[:, -block_size:] # max context len is block_size
+            context = idx[:, -context_len:] # max context len is block_size
             key, k = jax.random.split(key)
             logits = m.apply(params, context)[:,-1,:] # at the last token, B by vocab_size
             next_idx = jax.random.categorical(k, logits)
@@ -84,17 +85,18 @@ def generate(m, rng, params, decode, max_new_tokens=100):
 def main():
     rng = jax.random.PRNGKey(42)
     rng, init_rng, dropout_rng, data_rng = jax.random.split(rng, 4)
-    dataset, decode = DatasetDict["shakespear"]()  # TODO: make this arg
+    logging.info(f"loading data: {dataset_key}")
+    data, num_embeddings, decode = DatasetsMap[dataset_key](batch_size, context_len)
     m = NanoGpt(
-        num_embeddings=dataset.num_embeddings,
+        num_embeddings=num_embeddings,
         n_embed=n_embed,
-        block_size=block_size,
+        context_len=context_len,
         n_layer=n_layer,
         n_head=n_head,
         training=True,
         dropout=dropout,
     )
-    example_x, _ = next(iter(dataset.trainloader))  # these are np array
+    example_x, _ = next(iter(data.trainloader))  # these are np array
     params = m.init(
         {"params": init_rng, "dropout": dropout_rng},
         jnp.array(example_x),
@@ -104,9 +106,8 @@ def main():
     
     optimizer = optax.adamw(learning_rate=learning_rate)
 
-    final_state = run_train(m, params, optimizer, rng, dataset.trainloader, dataset.testloader)
-    if True:
-        generate(m, rng, final_state.params, decode)
+    final_state = train_shakespear(m, params, optimizer, rng, data.trainloader, data.testloader)
+    generate_shakespear(m, rng, final_state.params, decode)
 
 if __name__ == "__main__":
     main()

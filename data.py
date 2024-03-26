@@ -1,16 +1,18 @@
 from dataclasses import dataclass
 from typing import List
 
+from datasets import load_dataset, DatasetDict
 import numpy as np
 from jax import numpy as jnp
 from torch.utils.data import Dataset, DataLoader
+from tqdm import tqdm
+from tokenizers import Tokenizer
 
 
 @dataclass
 class DataSpec:
     trainloader: DataLoader
     testloader: DataLoader
-    num_embeddings: int
 
 
 # === tiny shakespear
@@ -55,19 +57,31 @@ def shakespear(batch_size=16, context_size=32):
         CharDataset(test_data, context_size), batch_size, shuffle=True
     )
 
-    return DataSpec(trainloader, testloader, len(chars)), decode
+    return DataSpec(trainloader, testloader), len(chars), decode
 
 
-DatasetDict = {
+# == wikitext
+def wikitext103(batch_size):
+    data = load_dataset("wikitext", name="wikitext-103-v1")
+    train_data = data["train"].filter(
+        lambda example: len(example["text"]) > 0 
+    )
+    test_data = data["test"].filter(
+        lambda example: len(example["text"]) > 0 
+    )
+    tokenizer = Tokenizer.from_pretrained("bert-base-uncased")
+
+    trainloader = DataLoader(
+        train_data, batch_size, shuffle=True
+    )
+    testloader = DataLoader(
+        test_data, batch_size, shuffle=True
+    )
+    
+    return DataSpec(trainloader, testloader), tokenizer
+
+
+DatasetsMap = {
     "shakespear": shakespear,
+    "wiki": wikitext103,
 }
-
-# def get_batch(split: str, k):
-#     print("wtf")
-#     # generate a small batch of data of inputs x and targets y
-#     data = train_data if split == 'train' else val_data
-#     maxval = len(data) - block_size
-#     idx = jax.random.randint(k, shape=(batch_size,), minval=0, maxval=maxval)
-#     x = jnp.stack([data[i:i+block_size] for i in idx])
-#     y = jnp.stack([data[i+1:i+block_size+1] for i in idx])
-#     return x, y

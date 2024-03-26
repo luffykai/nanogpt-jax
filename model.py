@@ -98,7 +98,7 @@ class Block(nn.Module):
 class NanoGpt(nn.Module):
     num_embeddings: int
     n_embed: int # embedding feature size
-    block_size: int # context len
+    context_len: int
     n_layer: int
     n_head: int
     bias: bool = False # bias in linear and layernorm
@@ -107,7 +107,7 @@ class NanoGpt(nn.Module):
 
     def setup(self):
         self.token_embedding = nn.Embed(num_embeddings=self.num_embeddings, features=self.n_embed)
-        self.positional_embedding = nn.Embed(num_embeddings=self.block_size, features=self.n_embed)
+        self.positional_embedding = nn.Embed(num_embeddings=self.context_len, features=self.n_embed)
         self.blocks = [Block(n_embed=self.n_embed, bias=self.bias, n_head=self.n_head, training=self.training, dropout=self.dropout) for _ in range(self.n_layer)]
         self.ln_f = nn.LayerNorm(use_bias=self.bias)
         self.lm_head = nn.Dense(self.num_embeddings, use_bias=self.bias)

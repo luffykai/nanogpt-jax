@@ -17,13 +17,13 @@ log_dir = os.path.join(os.getcwd(), "log")
 checkpoint_dir = os.path.join(log_dir, "checkpoint")
 
 # TODO: setup so it's easy to switch between local run and cloud gpu run
-num_epoch = 1
+num_epoch = 10
 dataset_key = "wiki"
 batch_size = 16
 context_len = 128
-n_embed = 64 # head size
+n_embed = 256 # head size
 n_head = 4
-n_layer = 4
+n_layer = 8
 learning_rate = 0.001
 dropout = 0.0
 # =====
@@ -76,12 +76,12 @@ def train(m: nn.Module, params, optimizer, rng, trainloader, testloader, tokeniz
         for batch_id, batch in enumerate(tqdm(trainloader)):
             x, y = make_input(batch["text"], tokenizer)
             state, loss = train_step(state, x, y, drop_rng)
-        if epoch % 10 == 0 or True:
-            rng, test_rng = jax.random.split(rng)
-            test_batch = next(iter(testloader))
-            x, y = make_input(test_batch["text"], tokenizer)
-            val_loss = calculate_loss(state, state.params, x, y, test_rng)
-            print(f"Step {epoch}: train loss: {loss}, val loss: {val_loss}")
+            if batch_id % 1000 == 0:
+                rng, test_rng = jax.random.split(rng)
+                test_batch = next(iter(testloader))
+                x, y = make_input(test_batch["text"], tokenizer)
+                val_loss = calculate_loss(state, state.params, x, y, test_rng)
+                print(f"Step {epoch}: train loss: {loss}, val loss: {val_loss}")
         save_model(state.params, (epoch+1) * len(trainloader))
     return state
 

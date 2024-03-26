@@ -1,8 +1,9 @@
-from typing import List
 import logging
+import os
+from typing import List
 
 from flax import linen as nn
-from flax.training import train_state
+from flax.training import checkpoints, train_state
 import jax
 import jax.numpy as jnp
 import optax
@@ -11,12 +12,15 @@ from tqdm import tqdm
 from model import NanoGpt
 from data import DatasetsMap
 
+
+log_dir = os.path.join(os.getcwd(), "log")
+checkpoint_dir = os.path.join(log_dir, "checkpoint")
+
 # TODO: setup so it's easy to switch between local run and cloud gpu run
-num_epoch = 10
-max_iter_per_epoch = 300
+num_epoch = 1
 dataset_key = "wiki"
-batch_size = 32
-context_len = 512
+batch_size = 16
+context_len = 128
 n_embed = 64 # head size
 n_head = 4
 n_layer = 4
@@ -38,14 +42,16 @@ def make_input(rows: List[str], tokenizer):
 
 
 def calculate_perplexity(state: train_state.TrainState, params, rows: List[str], tokenizer):
+    # it should be exp(cross entropy loss)?
     pass
 
 
-# TODO: dedup with the other train script
 def calculate_loss(state: train_state.TrainState, params, x, y, rng):
     logits = state.apply_fn(params, x, rngs = {"dropout": rng})
-    loss = optax.softmax_cross_entropy_with_integer_labels(logits, y).mean()
-    return loss
+    loss = optax.softmax_cross_entropy_with_integer_labels(logits, y)
+    mask = jnp.where(x==0, 0.0, 1.0)
+    loss = loss * mask
+    return loss.sum() / mask.sum()
 
 @jax.jit
 def train_step(state: train_state.TrainState, x, y, drop_rng):
@@ -70,15 +76,22 @@ def train(m: nn.Module, params, optimizer, rng, trainloader, testloader, tokeniz
         for batch_id, batch in enumerate(tqdm(trainloader)):
             x, y = make_input(batch["text"], tokenizer)
             state, loss = train_step(state, x, y, drop_rng)
-            if batch_id > max_iter_per_epoch:
-                break
         if epoch % 10 == 0 or True:
             rng, test_rng = jax.random.split(rng)
             test_batch = next(iter(testloader))
             x, y = make_input(test_batch["text"], tokenizer)
             val_loss = calculate_loss(state, state.params, x, y, test_rng)
             print(f"Step {epoch}: train loss: {loss}, val loss: {val_loss}")
+        save_model(state.params, (epoch+1) * len(trainloader))
     return state
+
+
+def save_model(params, step=0):
+    checkpoints.save_checkpoint(ckpt_dir=checkpoint_dir, target=params, step=step)
+
+
+def load_model():
+    return checkpoints.restore_checkpoint(ckpt_dir=checkpoint_dir, target=None)
 
 
 def main():
